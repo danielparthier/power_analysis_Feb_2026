@@ -1,8 +1,24 @@
+---
+title: "Power-Analysis C2"
+author: "Daniel Parthier"
+date: "2026-02-13"
+output: html_notebook
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Required packages for the power analysis and visualisation.
+```{r libraries}
 library(lme4)
 library(simr)
 library(data.table)
 library(ggplot2)
+```
 
+For this experiment we plan with an effect based on the Poisson distribution. Hence we will use the Incidence Rate Ratio (IRR) as our effect size. We will simulate data based on the expected IRR and then calculate the power for different n. The IRR and baseline lambda are based on Teng et al. 2022. However, we expect a reduction of the IRR by at least 15% when analysing the last 3 sessions.
+
+```{r sim_function}
 # design parameters
 p_vals <- function(n) {
   print(n)
@@ -59,17 +75,23 @@ p_vals <- function(n) {
   )
   return(data.table(n_animals = n, power = powerOut$pval))
 }
+```
 
+We apply for every n the function to extract the outcome of our tests. 
+```{r power_calculation, eval=FALSE}
 n_animals <- c(2:10)
 power_summary <- lapply(n_animals, p_vals)
 power_dt <- rbindlist(power_summary)[,.(n = sum(power < 0.05)), by=.(n_animals)]
+```
+
+Then the power is calculated based on the simulations
+```{r power_calculation_summary}
 power_dt[,`:=`(Power = n/1000, CI = list(qbeta(c(0.025, 0.5,0.975), shape1 = 1+n, shape2 = 1000-n))), by=.(n_animals)]
 power_dt[,`:=`(CI_low = unlist(CI)[1], CI_mid = unlist(CI)[2], CI_high = unlist(CI)[3]), by=.(n_animals)][,CI:=NULL,]
+```
 
-# save results as csv
-fwrite(power_dt, file="results/power_C2.csv")
 
-# plot power curve
+```{r power_plot}
 ggplot(power_dt, aes(x=n_animals, y=Power)) +
   geom_line()+
   geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.2)+
@@ -80,6 +102,9 @@ ggplot(power_dt, aes(x=n_animals, y=Power)) +
   annotate("text", x=power_dt[CI_low>0.8,min(n_animals),]+0.5, y=0.1, label=paste("  ",power_dt[CI_low>0.8,min(n_animals),],  "Tiere\nfür 80% Power"), hjust = "outward", vjust="outward")+
   coord_cartesian(ylim = c(0,1), xlim = c(0,12), expand = F)+
   theme_classic()
+```
+![](images/power_C2.png)
 
-# save plot
+```{r save_plot, eval=FALSE}
 ggsave("results/power_C2.png", width=6, height=4)
+```
